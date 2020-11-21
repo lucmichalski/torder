@@ -7,3 +7,9 @@
 [submodule ".docker/tor-hidden-service"]
 	path = .docker/tor-hidden-service
 	url = https://github.com/lucmichalski/docker-tor-hidden-service
+[submodule ".k8s/tor-privoxy-alpine-chart"]
+	path = .k8s/tor-privoxy-alpine-chart
+	url = https://github.com/lucmichalski/tor-privoxy-alpine-chart
+[submodule ".k8s/tor-relay"]
+	path = .k8s/tor-relay
+	url = https://github.com/lucmichalski/tor-relay
