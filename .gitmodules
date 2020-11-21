@@ -34,3 +34,27 @@
 [submodule ".refs/huntgraph"]
 	path = .refs/huntgraph
 	url = https://github.com/lucmichalski/huntgraph
+[submodule ".refs/onion-crawler"]
+	path = .refs/onion-crawler
+	url = https://github.com/lucmichalski/onion-crawler
+[submodule ".docker/trandoshan"]
+	path = .docker/trandoshan
+	url = https://github.com/lucmichalski/trandoshan
+[submodule ".docker/onionize-docker"]
+	path = .docker/onionize-docker
+	url = https://github.com/lucmichalski/onionize-docker
+[submodule ".docker/collective"]
+	path = .docker/collective
+	url = https://github.com/lucmichalski/collective
+[submodule ".docker/docker-multitor"]
+	path = .docker/docker-multitor
+	url = https://github.com/lucmichalski/docker-multitor
+[submodule ".k8s/weaviate-helm"]
+	path = .k8s/weaviate-helm
+	url = https://github.com/lucmichalski/weaviate-helm
+[submodule ".docker/manticore"]
+	path = .docker/manticore
+	url = https://github.com/lucmichalski/docker
+[submodule ".refs/darknet-economics"]
+	path = .refs/darknet-economics
+	url = https://github.com/lucmichalski/darknet-economics
