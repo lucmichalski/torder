@@ -1,3 +1,6 @@
 [submodule ".3rdparty/hyperscan"]
 	path = .3rdparty/hyperscan
 	url = https://github.com/intel/hyperscan
+[submodule ".k8s/tor-controller"]
+	path = .k8s/tor-controller
+	url = https://github.com/lucmichalski/tor-controller
