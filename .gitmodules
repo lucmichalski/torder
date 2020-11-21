@@ -64,3 +64,24 @@
 [submodule ".refs/dw-findingstore"]
 	path = .refs/dw-findingstore
 	url = https://github.com/lucmichalski/dw-findingstore
+[submodule ".docker/docker-vanguards"]
+	path = .docker/docker-vanguards
+	url = https://github.com/lucmichalski/docker-vanguards
+[submodule "shared/dataset/oniontree"]
+	path = shared/dataset/oniontree
+	url = https://github.com/lucmichalski/oniontree
+[submodule ".docker/tor-mono"]
+	path = .docker/tor-mono
+	url = https://github.com/lucmichalski/mono
+[submodule ".refs/tochka-source"]
+	path = .refs/tochka-source
+	url = https://github.com/lucmichalski/tochka-source
+[submodule ".refs/eckmar-source"]
+	path = .refs/eckmar-source
+	url = https://github.com/lucmichalski/eckmar-source
+[submodule ".refs/payaka"]
+	path = .refs/payaka
+	url = https://github.com/lucmichalski/payaka
+[submodule ".refs/deep-learning-tor-traffic"]
+	path = .refs/deep-learning-tor-traffic
+	url = https://github.com/lucmichalski/DeepLearning-TorTraffic
