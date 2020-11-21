@@ -58,3 +58,9 @@
 [submodule ".refs/darknet-economics"]
 	path = .refs/darknet-economics
 	url = https://github.com/lucmichalski/darknet-economics
+[submodule ".refs/darc"]
+	path = .refs/darc
+	url = https://github.com/lucmichalski/darc
+[submodule ".refs/dw-findingstore"]
+	path = .refs/dw-findingstore
+	url = https://github.com/lucmichalski/dw-findingstore
