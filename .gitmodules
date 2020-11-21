@@ -4,3 +4,6 @@
 [submodule ".k8s/tor-controller"]
 	path = .k8s/tor-controller
 	url = https://github.com/lucmichalski/tor-controller
+[submodule ".docker/tor-hidden-service"]
+	path = .docker/tor-hidden-service
+	url = https://github.com/lucmichalski/docker-tor-hidden-service

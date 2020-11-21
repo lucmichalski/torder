@@ -1,0 +1,377 @@
+
+---
+version: '3.7'
+services:
+
+  frontend:
+    image: lucmichalski/torder-frontend:latest
+    container_name: ${NAMESPACE}-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+    - NODE_ENV=development
+    ports:
+    - 3000:3000
+    working_dir: /usr/src/app    
+    networks:
+    - internal
+    - web  
+    volumes:
+    - ./frontend/package.json:/usr/src/app/package.json
+    - ./frontend/src:/usr/src/app/src
+    - ./frontend/public:/usr/src/app/public
+    command: ["react-scripts", "start"]
+
+  manticore:
+    image: manticoresearch/manticore:latest
+    container_name: ${NAMESPACE}-manticore
+    ports:
+    - 9306:9306
+    - 9312:9312
+    - 9308:9308
+    volumes:
+    - ./.config/manticore/manticore.conf:/etc/manticoresearch/manticore.conf
+    - manticore-data:/var/lib/manticore/data
+    networks:
+    - internal
+    ulimits:
+      nproc: 65535
+      nofile:
+         soft: 65535
+         hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    restart: unless-stopped
+ 
+  onionscan:
+    image: x0rzkov/onionscan:latest
+    container_name: ${NAMESPACE}-onionscan
+    build:
+      context: .docker/onionscan
+      dockerfile: Dockerfile
+
+  mysql:
+    image: mysql:5.7
+    container_name: ${NAMESPACE}-db
+    ports:
+    - 3314:3306
+    volumes:
+    - ${PWD}/shared/export/:/var/lib/mysql/export/ 
+    - ./.config/mysql/tor.cnf:/etc/mysql/conf.d/my.cnf
+    - db-data:/var/lib/mysql
+    networks:
+    - internal
+    - web
+    environment:
+      MYSQL_DATABASE: ${TOR_MYSQL_DATABASE}
+      MYSQL_PASSWORD: ${TOR_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${TOR_MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${TOR_MYSQL_USER}
+    restart: unless-stopped
+
+  backup:
+    image: zeenlym/mariadb-backup
+    container_name: ${NAMESPACE}-backup
+    depends_on:
+    - mysql
+    restart: unless-stopped
+    links:
+    - mysql:mysql
+    networks:
+    - internal
+    environment:
+    - TIMEZONE=${TIME_ZONE}
+    - SCHEDULE=0 0 0 3 *
+    - BACKUP_METHOD=mysqldump
+    - MYSQL_HOST=mysql
+    - MYSQL_DATABASE=${TOR_MYSQL_DATABASE}
+    - MYSQL_USER=${TOR_MYSQL_USER}
+    - MYSQL_PASSWORD=${TOR_MYSQL_PASSWORD}
+    volumes:
+    - ./shard/backup/mysql:/backup
+    restart: unless-stopped
+
+  redis:
+    image: redis
+    container_name: ${NAMESPACE}-redis
+    ports:
+    - 6379:6379
+    networks:
+    - internal
+    - web
+    restart: unless-stopped
+
+  # https://github.com/negabaro/redis-backup-restore
+  # cronjob: */30 * * * * /usr/bin/bash -c 'docker run -v /ebs:/ebs -e redisoperation="export" -e rediskeydir="/ebs/data/backup/redis/" -e rediskeyfile="`date +\%Y\%m\%d\%H\%M\%S`_redisbackup.json" -e redishost="172.17.0.1" -e redisport="6379" -e redisdb="0" negabaro2/redis-backup-restore' >> /ebs/logs/redisbackup/redisbackup.log 2>&1
+  redis-backup:
+    image: x0rzkov/redis-backup:latest
+    container_name: ${NAMESPACE}-redis-backup
+    build: 
+      context: .docker/redis-backup
+      dockerfile: Dockerfile
+    # restart: unless-stopped
+    environment:
+    - redisoperation="export"
+    - rediskeydir="/ebs/data/backup/redis/" 
+    - rediskeyfile="tor-spider_redisbackup.json" 
+    - redishost="redis" 
+    - redisport="6379" 
+    - redisdb="0"
+    volumes:
+    - ./shared/backup/redis:/ebs/data
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ${NAMESPACE}-redis-commander
+    hostname: redis-commander
+    restart: unless-stopped
+    environment:
+    - REDIS_HOSTS=local:redis:6379
+    ports:
+    - "8081:8081"
+    networks:
+    - internal
+    - web
+
+  # ref. multi-es https://github.com/Richman711/ELK-Stack-Deployments/blob/master/docker-compose/7-ES_1-Kibana_basic-sec.yml
+  elasticsearch:
+    container_name: ${NAMESPACE}-elastic
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.6.1
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+    - internal
+    volumes:
+    - es-data:/usr/share/elasticsearch/data
+    - es-log:/var/log/elasticsearch
+    restart: unless-stopped
+
+  elastalert:
+    container_name: ${NAMESPACE}-elastalert    
+    build:
+      context: .docker/elastalert
+      dockerfile: Dockerfile
+    ports:
+    - 3030:3030
+    volumes:
+    - .docker/elastalert/config/elastalert.yaml:/opt/elastalert/config.yaml
+    - .docker/elastalert/config/config.json:/opt/elastalert-server/config/config.json
+    - .docker/elastalert/rules:/opt/elastalert/rules
+    - .docker/elastalert//rule_templates:/opt/elastalert/rule_templates
+    networks:
+    - internal
+    - web
+    restart: unless-stopped
+
+  kibana:
+    container_name: ${NAMESPACE}-kibana
+    image: docker.elastic.co/kibana/kibana:7.6.1
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+    networks:
+    - internal
+    - web
+
+  mongo:
+    image: webhippie/mongodb:latest
+    container_name: ${NAMESPACE}-mongodb
+    restart: always
+    ports:
+    - 27017:27017
+    - 28017:28017
+    - 27019:27019
+    volumes:
+    - mongo-data:/var/lib/mongodb/db
+    - mongo-backup:/var/lib/backup
+    networks:
+    - internal
+    environment:
+    - MONGODB_AUTH=${MONGODB_AUTH}
+    - MONGODB_AUTH_DB=${MONGODB_AUTH_DB}
+    - MONGODB_DATABASE=${MONGODB_DATABASE}
+    - MONGODB_DBPATH=${MONGODB_DBPATH}
+    - MONGODB_PASSWORD=${MONGODB_PASSWORD}
+    - MONGODB_REST=${MONGODB_REST}
+    - MONGODB_ROOT_PASSWORD=${MONGODB_ROOT_PASSWORD}
+    - MONGODB_ROOT_USERNAME=${MONGODB_ROOT_USERNAME}
+    - MONGODB_USERNAME=${MONGODB_USERNAME}
+    - MONGODB_VERBOSE=${MONGODB_VERBOSE}
+
+  mongoexpress:
+    restart: always
+    image: mongo-express
+    container_name: ${NAMESPACE}-mongoexpress
+    links:
+    - mongo:mongo
+    environment:
+    - VCAP_APP_PORT=8090
+    - ME_CONFIG_MONGODB_AUTH_USERNAME=""
+    - ME_CONFIG_MONGODB_AUTH_PASSWORD=""
+    depends_on:
+    - mongo
+    ports:
+    - 8090:8090
+    networks:
+    - internal
+    - web
+
+  tor:
+    restart: always
+    container_name: ${NAMESPACE}-tor-haproxy
+    image: x0rzkov/tor-haproxy:latest
+    build:
+      context: .docker/tor-haproxy
+      dockerfile: Dockerfile
+    environment:
+    - privoxy=1
+    - privoxy_port=8119
+    - tors=75
+    networks:
+    - internal
+    ports:
+    - 5566:5566
+    - 2090:2090
+    - 8119:8119
+
+  spider:
+    image: torder-spider
+    container_name: ${NAMESPACE}-spider
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+    #  - tor
+      - redis
+      - elasticsearch
+      - mongo
+    volumes:
+    - ./blacklist.txt:/dist/blacklist.txt
+    ports:
+    - 8888:8888
+    networks:
+    - internal
+    - web
+    environment:
+    - REDIS_URI=${REDIS_URI}
+    - ELASTIC_URI=${ELASTIC_URI}
+    - ELASTIC_INDEX=${ELASTIC_INDEX}
+    - PROXY_URI=${PROXY_URI}
+    - MONGO_URI=${MONGO_URI}
+    - MONGO_DB=${MONGO_DB}
+    - MONGO_COL=${MONGO_COL}
+    command: ["./tor-spider", "-b", "/dist/blacklist.txt"]
+
+  hbase:
+    image: x0rzkov/hbase:1.3.1-alpine
+    container_name: ${NAMESPACE}-hbase
+    build:
+      context: .docker/hbase
+      dockerfile: Dockerfile
+    links:
+    - zookeeper:zk
+    hostname: hbase
+    ports:
+    - 8080:8080
+    - 8085:8085
+    - 60000:60000
+    - 60010:60010
+    - 60020:60020
+    - 60030:60030
+    - 8070:8070
+    - 8090:8090
+    networks:
+    - internal
+    - web
+
+  zookeeper:
+    image: zookeeper
+    container_name: ${NAMESPACE}-zookeper
+    networks:
+    - internal
+    - web
+    hostname: zk
+    ports:
+    - 2181:2181
+    networks:
+    - internal
+    - web
+
+  kafka:
+    image: x0rzkov/kafka:2.5.0-alpine
+    container_name: ${NAMESPACE}-kafka
+    build:
+      context: .docker/kafka
+      dockerfile: Dockerfile
+    ports:
+    - 9092:9092
+    depends_on:
+    - zookeeper
+    links:
+    - zookeeper:zk
+    networks:
+    - internal
+    - web
+    environment:
+      # KAFKA_ADVERTISED_HOST_NAME: 192.168.56.102
+      KAFKA_ADVERTISED_PORT: 9092
+      KAFKA_ZOOKEEPER_CONNECT: "zk:2181"
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+
+  kafka-manager:
+    image: hlebalbau/kafka-manager:stable
+    container_name: ${NAMESPACE}-kafka-manager
+    ports:
+    - "9000:9000"
+    links:
+    - zookeeper:zk
+    environment:
+      ZK_HOSTS: "zk:2181"
+      APPLICATION_SECRET: letmein
+      KM_ARGS: -Djava.net.preferIPv4Stack=true
+    networks:
+    - internal
+    - web
+    command: -Dpidfile.path=/dev/null
+
+  hue:
+    image: fjardim/hue
+    hostname: hue
+    container_name: hue
+    dns: 8.8.8.8
+    ports:
+    - "8888:8888"
+    volumes:
+    - ./.config/hue/hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
+    #depends_on:
+    #- "database"
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+
+volumes:
+  es-log:
+  es-data:
+  db-data:
+  mongo-data:
+  mongo-backup:
+  manticore-data:
+
+networks:
+  internal:
+  web:
+    external: true
