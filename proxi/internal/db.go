@@ -1,0 +1,389 @@
+/*
+ * Copyright © 2020 nicksherron <nsherron90@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package internal
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/k0kubun/pp"
+	_ "github.com/lib/pq"
+)
+
+var (
+	DB              *sql.DB
+	GORMDB          *gorm.DB
+	DbPath          string
+	Driver          string
+	Drivers         = []string{"mysql", "postgres", "sqlite"}
+	connectionLimit int
+)
+
+//Model gets embedded into Proxy
+type Model struct {
+	ID        uint      `json:"-" gorm:"primary_key"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// DeletedAt *time.Time `json:"-"`
+}
+
+// Proxy represents a proxy record and is used to create the table for our db.
+type Proxy struct {
+	// gorm.Model
+	Model
+	RespTime     *string `json:"response_time"`
+	CheckCount   uint    `json:"check_count" gorm:"default:0"`
+	Country      string  `json:"country" `
+	FailCount    uint    `json:"fail_count" gorm:"default:0"`
+	LastStatus   string  `json:"last_status"`
+	Proxy        string  `json:"proxy" gorm:"type:varchar(100);unique_index"`
+	TimeoutCount uint    `json:"timeout_count" gorm:"default:0"`
+	Source       string  `json:"source"`
+	SuccessCount uint    `json:"success_count" gorm:"default:0"`
+	Anonymous    bool    `json:"anonymous"`
+	LosingStreak uint    `json:"-" gorm:"default:0"`
+	Deleted      bool    `json:"-" gorm:"default:false"`
+	Judge        string  `json:"-"`
+}
+
+// Proxies is a slice of Proxy
+type Proxies []*Proxy
+
+type TableStats struct {
+	Anon            int   `json:"anon"`
+	Good            int   `json:"good"`
+	Timeout         int   `json:"timeout"`
+	Total           int   `json:"total"`
+	RecentlyChecked int64 `json:"recently_checked"`
+}
+
+// DbInit initializes our db.
+func DbInit() {
+	// GormDB contains DB connection state
+	var gormdb *gorm.DB
+	var err error
+
+	switch strings.ToLower(Driver) {
+	case "mysql":
+		if os.Getenv("XD_MYSQL_DATABASE") != "" {
+			DbPath = fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4,utf8&parseTime=True", os.Getenv("XD_MYSQL_USER"), os.Getenv("XD_MYSQL_PASSWORD"), os.Getenv("XD_MYSQL_HOST"), os.Getenv("XD_MYSQL_PORT"), os.Getenv("XD_MYSQL_DATABASE"))
+		}
+		DB, err = sql.Open("mysql", DbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		gormdb, err = gorm.Open("mysql", DbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		connectionLimit = 50
+
+	case "postgres":
+		if os.Getenv("XD_MYSQL_DATABASE") != "" {
+			DbPath = fmt.Sprintf("postgres://%v:%v@%v/%v?sslmode=disable", os.Getenv("XD_MYSQL_USER"), os.Getenv("XD_MYSQL_PASSWORD"), os.Getenv("XD_MYSQL_HOST"), os.Getenv("XD_MYSQL_DATABASE"))
+		}
+		DB, err = sql.Open("postgres", DbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		gormdb, err = gorm.Open("postgres", DbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		connectionLimit = 50
+
+	case "sqlite":
+		DbPath = fmt.Sprintf("file:%v?cache=shared&mode=rwc", DbPath)
+		DB, err = sql.Open("sqlite3", DbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		gormdb, err = gorm.Open("sqlite3", DbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		DB.Exec("PRAGMA journal_mode=WAL;")
+		connectionLimit = 1
+
+	default:
+		log.Fatal("Unkown backend storage driver. valid drivers: " + strings.Join(Drivers, ","))
+
+	}
+	pp.Println("DbPath:", DbPath)
+
+	DB.SetMaxOpenConns(connectionLimit)
+	gormdb.AutoMigrate(&Proxy{})
+	gormdb.Model(&Proxy{}).AddIndex("idx_proxy_compound", "deleted", "last_status", "anonymous", "country")
+
+	// required for the admin
+	GORMDB = gormdb
+
+	if connectionLimit != 1 {
+		_, err := DB.Exec(`
+			create or replace view proxies_stats as
+			select (select count(*) from proxies where deleted = false And last_status = 'good' AND anonymous) as anon,
+			       (select count(*) from proxies where deleted = false And last_status = 'good')               as good,
+			       (select count(*) from proxies where deleted = false And last_status = 'timeout')            as timeout,
+			       (select count(*) from proxies)                                                              as total;`)
+		if err != nil {
+			log.Fatal("DB.Exec", err)
+		}
+	} else {
+		_, err := DB.Exec(`
+			create view if not exists proxies_stats  as
+			select (select count(*) from proxies where deleted = false And last_status = 'good' AND anonymous) as anon,
+			       (select count(*) from proxies where deleted = false And last_status = 'good')               as good,
+			       (select count(*) from proxies where deleted = false And last_status = 'timeout')            as timeout,
+			       (select count(*) from proxies)                                                              as total;`)
+		if err != nil {
+			log.Fatal("DB.Exec", err)
+		}
+	}
+
+	dbCacheStats()
+}
+
+// DbPing pings DB and either prints "Pong" or does nothing.
+func DbPing() {
+	DbInit()
+	pingErr := DB.Ping()
+	if pingErr == nil {
+		fmt.Println("Pong")
+	}
+}
+
+// dbStats
+var stats TableStats
+
+func dbPrepWrite() {
+	dbCacheStats()
+}
+
+func dbCacheStats() {
+	// Raw SQL
+	err := GORMDB.Raw(`select anon, good, timeout, total from proxies_stats`).Scan(&stats).Error
+	//err := DB.QueryRow(`select "anon", "good", "timeout", "total" from proxies_stats`).Scan(&stats.Anon, &stats.Good, &stats.Timeout, &stats.Total)
+	if err != nil {
+		log.Fatal("dbCacheStats:", err)
+	}
+}
+
+//--------------------------------------------------------------------------------------
+
+func loadDb(proxy *Proxy) {
+	defer mutex.Unlock()
+	mutex.Lock()
+
+	// db.Set("gorm:insert_option", "ON CONFLICT").Create(&product)
+	// find proxy
+	var proxyExists Proxy
+	if GORMDB.Where("proxy = ?", &proxy.Proxy).First(&proxyExists).RecordNotFound() {
+		err := GORMDB.Create(proxy).Error
+		if err != nil {
+			log.Fatal("GORMDB.proxyExists.Create:", err)
+		}
+		return
+	}
+
+	// update
+	proxy.ID = proxyExists.ID
+	proxy.UpdatedAt = time.Now()
+	err := GORMDB.Save(proxy).Error
+	if err != nil {
+		log.Fatal("GORMDB.proxyExists.Save:", err)
+	}
+
+	/*
+			_, err := DB.Exec(`insert into proxies(created_at, updated_at, check_count, country, fail_count,
+		 							last_status, proxy, timeout_count, source, success_count, anonymous, losing_streak)
+		 							VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		 							ON CONFLICT (proxy) DO UPDATE SET updated_at = EXCLUDED.updated_at
+		 							`, time.Now(), time.Now(), &proxy.CheckCount, &proxy.Country, &proxy.FailCount,
+				&proxy.LastStatus, &proxy.Proxy, &proxy.TimeoutCount, &proxy.Source, &proxy.SuccessCount, &proxy.Anonymous, &proxy.LosingStreak)
+			if err != nil {
+				log.Fatal(err)
+			}
+	*/
+}
+
+func dbInsert(proxy *Proxy) {
+	defer mutex.Unlock()
+	mutex.Lock()
+
+	proxy.UpdatedAt = time.Now()
+	err := GORMDB.Save(proxy).Error
+	if err != nil {
+		log.Fatal("GORMDB.dbInsert.Save:", err)
+	}
+	/*
+			_, err := DB.Exec(`update proxies SET updated_at = $1, check_count = $2 ,fail_count = $3,
+		 							last_status = $4, timeout_count = $5, success_count = $6, losing_streak = $7,
+		 							 deleted = $8,  anonymous = $9 , proxy = $10, judge = $11, resp_time = $12 where id = $13`,
+				time.Now(), &proxy.CheckCount, &proxy.FailCount, &proxy.LastStatus, &proxy.TimeoutCount,
+				&proxy.SuccessCount, &proxy.LosingStreak, &proxy.Deleted, &proxy.Anonymous, &proxy.Proxy, &proxy.Judge, &proxy.RespTime, &proxy.ID)
+			if err != nil {
+				log.Println("dbInsert: ", err)
+			}
+	*/
+}
+
+func dbFind() Proxies {
+	var out Proxies
+	rows, err := DB.Query(`SELECT resp_time, id, check_count, fail_count, proxy,
+ 										timeout_count, success_count, losing_streak FROM proxies where deleted = false`)
+	if err != nil {
+		log.Println("dbFind: ", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row Proxy
+		err = rows.Scan(&row.RespTime, &row.ID, &row.CheckCount, &row.FailCount, &row.Proxy, &row.TimeoutCount,
+			&row.SuccessCount, &row.LosingStreak)
+		if err != nil {
+			log.Println("dbFind.Scan: ", err)
+		}
+		out = append(out, &row)
+	}
+	return out
+}
+
+//--------------------------------------------------------------------------------------
+
+func findProxy(p string) interface{} {
+	var row Proxy
+	err := DB.QueryRow(`select resp_time,  anonymous,   check_count, country, created_at, fail_count, id,
+   						       last_status, proxy, source, success_count, timeout_count,
+   						      updated_at from proxies where proxy = $1`, p).Scan(&row.RespTime, &row.Anonymous,
+		&row.CheckCount, &row.Country, &row.CreatedAt, &row.FailCount, &row.ID,
+		&row.LastStatus, &row.Proxy, &row.Source, &row.SuccessCount, &row.TimeoutCount, &row.UpdatedAt)
+
+	if err != nil {
+		log.Println(err)
+	}
+	if row.Proxy != "" {
+		return row
+	}
+	return nil
+}
+
+func getProxyN(num int64, c *gin.Context) Proxies {
+	var (
+		proxies Proxies
+		rows    *sql.Rows
+		err     error
+	)
+	_, anon := c.GetQuery("anon")
+	country, countryBool := c.GetQuery("country")
+	country = strings.ToUpper(country)
+
+	if anon {
+		if countryBool {
+			// better performance with sub queries, see https://stackoverflow.com/a/24591688.
+			rows, err = DB.Query(`select "resp_time", "anonymous",   "check_count",   "country",   "created_at",   "fail_count",   "id",
+   						       "last_status",   "proxy",   "source",   "success_count",   "timeout_count",
+   						      "updated_at"  from proxies 
+   						      where id in (select id from proxies where last_status = 'good' and country = $1 and anonymous order by random() limit $2)`, country, num)
+		} else {
+			rows, err = DB.Query(`select "resp_time", "anonymous",   "check_count",   "country",   "created_at",   "fail_count",   "id",
+   						       "last_status",   "proxy",   "source",   "success_count",   "timeout_count",
+   						      "updated_at"  from proxies 
+   						      where id in (select id from proxies where last_status = 'good' and anonymous order by random() limit $1)`, num)
+		}
+	} else {
+		if countryBool {
+			rows, err = DB.Query(`select "resp_time", "anonymous",   "check_count",   "country",   "created_at",   "fail_count",
+							   "id", "last_status",   "proxy",   "source",   "success_count",   "timeout_count", "updated_at"
+							     from proxies where id in (select id from proxies where last_status = 'good' and
+							      country = $1 order by random() limit $2)`, country, num)
+		} else {
+			rows, err = DB.Query(`select "resp_time", "anonymous",   "check_count",   "country",   "created_at",   
+								"fail_count",   "id","last_status",   "proxy",   "source",   "success_count",
+								"timeout_count","updated_at"  from proxies where id in 
+								(select id from proxies where last_status = 'good'  order by random() limit $1)`, num)
+		}
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var row Proxy
+		err = rows.Scan(&row.RespTime, &row.Anonymous, &row.CheckCount, &row.Country, &row.CreatedAt, &row.FailCount, &row.ID,
+			&row.LastStatus, &row.Proxy, &row.Source, &row.SuccessCount, &row.TimeoutCount, &row.UpdatedAt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		proxies = append(proxies, &row)
+	}
+	return proxies
+}
+
+func getProxyAll() Proxies {
+	var proxies Proxies
+	rows, err := DB.Query(`select "resp_time", "anonymous",   "check_count",   "country",   "created_at",   "fail_count",   "id",
+   						       "last_status",   "proxy",   "source",   "success_count",   "timeout_count",
+   						      "updated_at"  from proxies`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row Proxy
+		err = rows.Scan(&row.RespTime, &row.Anonymous, &row.CheckCount, &row.Country, &row.CreatedAt, &row.FailCount, &row.ID,
+			&row.LastStatus, &row.Proxy, &row.Source, &row.SuccessCount, &row.TimeoutCount, &row.UpdatedAt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		proxies = append(proxies, &row)
+	}
+	return proxies
+
+}
+
+func deleteProxy(p string) interface{} {
+	row, err := DB.Exec(`delete from proxies where proxy = $1`, p)
+	if err != nil {
+		log.Fatal(err)
+	}
+	result, err := row.RowsAffected()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return result
+}
+
+func getStats() TableStats {
+
+	if DB.Stats().InUse != DB.Stats().MaxOpenConnections {
+		dbCacheStats()
+	}
+
+	stats.RecentlyChecked = atomic.LoadInt64(&testCount)
+	return stats
+}

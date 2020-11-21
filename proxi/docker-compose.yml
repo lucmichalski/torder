@@ -1,0 +1,129 @@
+---
+version: '3.7'
+services:
+
+  proxi:
+    image: proxi:latest
+    container_name: ${NAMESPACE}-server
+    ports:
+    - 4445:4445
+    networks:
+    - web
+    - internal
+    environment:
+      PROXI_DUMP: 1
+      PROXI_PROVIDER_DEBUG: 1
+      PROXI_DEBUG_JUDGES: ""
+      PROXI_WORKERS: 100
+      # PROXI_ADDRESS: 0.0.0.0:4445
+    command: [proxi", "server", "--init", "--addr", "0.0.0.0:4445"]      
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:5.7
+    container_name: ${NAMESPACE}-db
+    ports:
+    - 3318:3306
+    volumes:
+    - db-data:/var/lib/mysql
+    - ${PWD}/shared/export/:/var/lib/mysql/export/
+    - ./.config/mysql/finance.cnf:/etc/mysql/conf.d/my.cnf
+    networks:
+    - internal
+    environment:
+      MYSQL_DATABASE: ${FD_MYSQL_DATABASE}
+      MYSQL_PASSWORD: ${FD_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${FD_MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${FD_MYSQL_USER}
+    restart: unless-stopped
+
+  backup:
+    image: zeenlym/mariadb-backup
+    container_name: ${NAMESPACE}-backup
+    depends_on:
+    - mysql
+    restart: unless-stopped
+    networks:
+    - internal
+    environment:
+    - TIMEZONE=${TIME_ZONE}
+    - SCHEDULE=0 0 0 3 *
+    - BACKUP_METHOD=mysqldump
+    - MYSQL_HOST=mysql
+    - MYSQL_DATABASE=${FD_MYSQL_DATABASE}
+    - MYSQL_USER=${FD_MYSQL_USER}
+    - MYSQL_PASSWORD=${FD_MYSQL_PASSWORD}
+    - MYSQL_PORT=${FD_MYSQL_PORT}
+    volumes:
+    - ./shared/backup:/backup
+    restart: unless-stopped
+
+  selenium:
+    image: selenium/standalone-chrome:latest
+    container_name: ${NAMESPACE}-selenium
+    ports:
+    - 4444:4444
+    volumes:
+    - /dev/shm:/dev/shm
+    networks:
+    - internal
+    - web
+    restart: unless-stopped
+
+  tor-haproxy:
+    restart: always
+    container_name: ${NAMESPACE}-tor-haproxy
+    image: lucmichalski/tor-haproxy:latest       
+    build:
+      context: .docker/tor-haproxy
+      dockerfile: Dockerfile
+    environment:
+    - privoxy=1
+    - privoxy_port=8119
+    - tors=25
+    networks:
+    - internal
+    - web
+    ports:
+    - 5566:5566
+    - 2090:2090
+    - 8119:8119
+
+  protonvpn:
+    image: protonvpn-docker
+    container_name: ${NAMESPACE}-protonvpn
+    build:
+      context: .docker/protonvpn
+      dockerfile: Dockerfile
+      args:
+      - PROTONVPN_USER=${PROTONVPN_USER}
+      - PROTONVPN_PASSWORD=${PROTONVPN_PASSWORD} 
+    stdin_open: true
+    tty: true
+    environment:
+    - SOCKD_WORKERS=10
+    # volumes:
+    # - ./shared/logs/protovpn/pvpn-cli.log:/root/.pvpn-cli/pvpn-cli.log
+    # - ./shared/logs/protovpn/ovpn.log:/root/.pvpn-cli/ovpn.log
+    ports:
+    - "1080:1080"
+    cap_add:
+    - NET_ADMIN
+    devices:
+    - "/dev/net/tun:/dev/net/tun"
+    command: >
+      sh -c "protonvpn connect --cc US &&
+      sockd -N $$SOCKD_WORKERS"
+    networks:
+    - internal
+    - web
+    #volumes:
+    #- "./sockd.conf:/etc/sockd.conf"
+
+networks:
+  internal:
+  web:
+    external: true
+
+volumes:
+  db-data:
