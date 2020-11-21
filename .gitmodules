@@ -13,3 +13,24 @@
 [submodule ".k8s/tor-relay"]
 	path = .k8s/tor-relay
 	url = https://github.com/lucmichalski/tor-relay
+[submodule ".refs/silk-road-author-identification"]
+	path = .refs/silk-road-author-identification
+	url = https://github.com/lucmichalski/silk-road-author-identification
+[submodule ".refs/dargle"]
+	path = .refs/dargle
+	url = https://github.com/lucmichalski/dargle
+[submodule ".refs/dark-web-analysis"]
+	path = .refs/dark-web-analysis
+	url = https://github.com/lucmichalski/DarkWebAnalysis
+[submodule ".refs/dark-wek-markets"]
+	path = .refs/dark-wek-markets
+	url = https://github.com/lucmichalski/darkwebmarkets
+[submodule ".refs/dark-wek-analytics"]
+	path = .refs/dark-wek-analytics
+	url = https://github.com/lucmichalski/Dark-Web-Analytics
+[submodule ".refs/dw-gan"]
+	path = .refs/dw-gan
+	url = https://github.com/lucmichalski/DW-GAN
+[submodule ".refs/huntgraph"]
+	path = .refs/huntgraph
+	url = https://github.com/lucmichalski/huntgraph
