@@ -85,3 +85,12 @@
 [submodule ".refs/deep-learning-tor-traffic"]
 	path = .refs/deep-learning-tor-traffic
 	url = https://github.com/lucmichalski/DeepLearning-TorTraffic
+[submodule ".docker/alpine-chrome"]
+	path = .docker/alpine-chrome
+	url = https://github.com/lucmichalski/alpine-chrome
+[submodule ".refs/crawlab"]
+	path = .refs/crawlab
+	url = https://github.com/lucmichalski/crawlab
+[submodule ".refs/tor-bot"]
+	path = .refs/tor-bot
+	url = https://github.com/lucmichalski/TorBot
