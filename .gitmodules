@@ -94,3 +94,69 @@
 [submodule ".refs/tor-bot"]
 	path = .refs/tor-bot
 	url = https://github.com/lucmichalski/TorBot
+[submodule ".refs/bert-topic"]
+	path = .refs/bert-topic
+	url = https://github.com/lucmichalski/BERTopic
+[submodule ".refs/contextualized-topic-models"]
+	path = .refs/contextualized-topic-models
+	url = https://github.com/lucmichalski/contextualized-topic-models
+[submodule ".refs/topc2vec"]
+	path = .refs/topc2vec
+	url = https://github.com/lucmichalski/Top2Vec
+[submodule ".refs/t-bert"]
+	path = .refs/t-bert
+	url = https://github.com/lucmichalski/tBERT
+[submodule ".refs/bert-crf-topic-detection"]
+	path = .refs/bert-crf-topic-detection
+	url = https://github.com/lucmichalski/bert_crf_topic_detection
+[submodule ".refs/topic-bert"]
+	path = .refs/topic-bert
+	url = https://github.com/lucmichalski/TopicBERT
+[submodule ".refs/lda-bert"]
+	path = .refs/lda-bert
+	url = https://github.com/lucmichalski/lda_bert
+[submodule ".refs/bert-topic-modelling"]
+	path = .refs/bert-topic-modelling
+	url = https://github.com/lucmichalski/BERT-TopicModelling
+[submodule ".refs/bert-based-topic-recommendation"]
+	path = .refs/bert-based-topic-recommendation
+	url = https://github.com/lucmichalski/BERT-based-topic-recommendation
+[submodule ".refs/topic-modeling-bert-lda"]
+	path = .refs/topic-modeling-bert-lda
+	url = https://github.com/lucmichalski/Topic-Modeling-BERT-LDA
+[submodule ".refs/bert-lda-combo"]
+	path = .refs/bert-lda-combo
+	url = https://github.com/lucmichalski/Bert_LDA_Combo
+[submodule ".refs/user-comment-classification-and-bias-minimiazation"]
+	path = .refs/user-comment-classification-and-bias-minimiazation
+	url = https://github.com/lucmichalski/user-comment-classification-and-bias-minimiazation
+[submodule ".refs/cnn-topic-classification"]
+	path = .refs/cnn-topic-classification
+	url = https://github.com/lucmichalski/cnn-topic-classification
+[submodule ".refs/multi-task-ranking"]
+	path = .refs/multi-task-ranking
+	url = https://github.com/lucmichalski/multi-task-ranking
+[submodule ".refs/topix"]
+	path = .refs/topix
+	url = https://github.com/lucmichalski/topix
+[submodule ".refs/sidetopics"]
+	path = .refs/sidetopics
+	url = https://github.com/lucmichalski/sidetopics
+[submodule ".docker/web-crawler-lda"]
+	path = .docker/web-crawler-lda
+	url = https://github.com/lucmichalski/WebCrawler
+[submodule ".refs/topics-explorer"]
+	path = .refs/topics-explorer
+	url = https://github.com/lucmichalski/TopicsExplorer
+[submodule ".refs/lda-chatbot"]
+	path = .refs/lda-chatbot
+	url = https://github.com/lucmichalski/chatbot
+[submodule "shared/dataset/deepdotweb"]
+	path = shared/dataset/deepdotweb
+	url = https://github.com/lucmichalski/deepdotweb
+[submodule ".refs/tor-end-game"]
+	path = .refs/tor-end-game
+	url = https://github.com/lucmichalski/EndGame
+[submodule ".docker/gocolly-scrp"]
+	path = .docker/gocolly-scrp
+	url = https://github.com/lucmichalski/scrp
